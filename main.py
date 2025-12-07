@@ -26,8 +26,10 @@ def evaluate_gifting_pairs(user_data, present_count):
 
 
 #HELPER FUNCTIONS
-def emailing(from_address, password, to_address, message="", login_trial=False):
+def emailing(from_address, password, to_address, message="", login_trial=False, debug=False, verbose=False):
     with smtplib.SMTP('smtp.gmail.com', 587) as smtp:
+        if verbose:
+            smtp.set_debuglevel(True) 
         smtp.ehlo()
         smtp.starttls()
         smtp.ehlo()
@@ -41,13 +43,17 @@ def emailing(from_address, password, to_address, message="", login_trial=False):
             if login_trial:
                 return True
         except Exception as e:
-            print(f"Login failed. Check your email and password. Error: {e}")
+            print(f"Login failed. Check your email and password.")
+            if debug:
+                print(f"Error: {e}")
             return False
 
         try:
-            smtp.sendmail(from_address, to_address, msg)
-        except:
+            smtp.sendmail(from_address, to_address, msg.encode('utf-8'))
+        except Exception as e:
             print(f"Failed to send email to {to_address} from {from_address}.")
+            if debug:
+                print(f"Error: {e}")
             return False
         return True
 
@@ -230,7 +236,7 @@ def message_user_input(present_count, debug=False):
             try:
                 message_source = int(input_value)
             except:
-                pass
+                message_source = 100
     
         valid = False
         while not valid:
@@ -252,8 +258,12 @@ def message_user_input(present_count, debug=False):
                 print("The message will not send the name of who the user needs to gift their present to. Please include [gifter_name] in the message.")
                 valid = False
             else:
-                print("Please confirm this is your intended message:")
-                print("\'" + message + "\'")
+                temp_msg = message
+                temp_msg = temp_msg.replace("[gifter_name]", "GIFTER_NAME").replace("[receiver_name]", "RECEIVER_NAME").replace("[receiver_address]", "RECEIVER_ADDRESS")
+                print("Please confirm this is your intended message. Note that your parameters to be replaced should be replaced in this message without brackets and in caps:")
+                print()
+                print("\'" + temp_msg + "\'")
+                print()
                 confirmation = input("Type 'y' to confirm, or any other key to re-enter the message: ")
                 if confirmation.lower() != 'y':
                     valid = False
@@ -269,7 +279,7 @@ def message_user_input(present_count, debug=False):
             try:
                 user_source = int(input_value)
             except:
-                pass
+                user_source = 100
 
         valid = False
         while not valid:
@@ -306,7 +316,7 @@ def determine_gifting_pairs(user_data, present_count):
             try:
                 adjustment_choice = int(input_value)
             except:
-                pass
+                adjustment_choice = 100
 
         if adjustment_choice == 1:
             present_count = get_present_count()
@@ -339,7 +349,7 @@ def determine_gifting_pairs(user_data, present_count):
         
     return user_data, present_count
 
-def emailing_users(user_data, message, from_address, password):
+def emailing_users(user_data, message, from_address, password, debug=False, verbose=False):
     invalid_emails = 0
     total_emails = len(list(user_data.keys()))
     print()
@@ -353,9 +363,9 @@ def emailing_users(user_data, message, from_address, password):
         addresses = addresses[:-2]
         
         personalized_message = message.replace("[gifter_name]", name)
-        personalized_message = personalized_message.replace("[reciever_name]", names)
-        personalized_message = personalized_message.replace("[reciever_address]", addresses)
-        email_success = emailing(from_address, password, data['email'], personalized_message)
+        personalized_message = personalized_message.replace("[receiver_name]", names)
+        personalized_message = personalized_message.replace("[receiver_address]", addresses)
+        email_success = emailing(from_address, password, data['email'], personalized_message, False, debug, verbose)
         if email_success:
             print(f"Email successfully sent to {name} ({data['email']}) for gifting.")
         else:
@@ -365,30 +375,94 @@ def emailing_users(user_data, message, from_address, password):
     print(f"Emailing complete. {total_emails - invalid_emails} out of {total_emails} emails were sent successfully.")
     return invalid_emails
 
+def save_pairs_to_file(user_data, debug=False):
+    filename = "gifting_pairs.txt"
+    if not debug:
+        valid = False
+        while not valid:
+            valid = True
+            print()
+            filename = input("Please enter the file to store all gifting pairs for record keeping, press enter to automatically name the file, or press 'n' to skip saving: ")
+            if filename == '':
+                filename = "gifting_pairs.txt"
+            elif filename.lower() == 'n':
+                return '', True
+            elif filename.lower().endswith('.txt') == False:
+                print("Invalid file name. Please ensure the file name ends with .txt")
+                valid = False
+            else:
+                saving = input(f"Are you sure you want to save the gifting pairs to the file '{filename}'? Type 'y' to confirm or press enter to cancel: ")
+                if saving.lower() != 'y':
+                    valid = False
+    try:
+        with open(filename, 'w') as file:
+            file.write(f"Gifting Matches:\n")
+            for name, data in user_data.items():
+                list_len = len(data['gifting_to'])
+                counter = 0
+                names = f'Participant: {name}, Gifting To: '
+                for gifting_to in data['gifting_to']:
+                    counter += 1
+                    if counter == list_len and list_len != 1:
+                        names += 'and ' + gifting_to
+                    elif list_len != 2 and list_len != 1:
+                        names += gifting_to + ", "
+                    elif list_len == 1:
+                        names += gifting_to
+                    else:
+                        names += gifting_to + " "
+             
+                file.write(f"{names}\n")
+        if not debug:
+            print()
+            print(f"Gifting pairs successfully saved to '{filename}'.")
+            print()
+            print(f"Please check if the file '{filename}' contains the correct gifting pairs for your records.")
+            continue_or_exit = input("Press 'y' to continue, press any key to exit: ")
+            if continue_or_exit.lower() != 'y':
+                return filename, False
+        return filename, True
+    except:
+        print(f"Failed to save gifting pairs to the file '{filename}'. Please ensure the file is accessible.")
+        return filename, False
+    
+
 def main():
     load_dotenv()
     from_address = os.getenv("EMAIL_ADDRESS")
     password = os.getenv("PASSWORD")
 
     debug = False
+    verbose = False
     input_val = input("Welcome to the Secret Santa Emailer! Press enter to continue. ")
-
-    if input_val.lower()[0] == 'd':
+    
+    if len(input_val) > 0 and input_val.lower()[0] == 'd':
+        debug = True
+    if len(input_val) > 0 and input_val.lower()[0] == 'v' or (len(input_val) > 1 and input_val.lower()[1] == 'v'):
+        verbose = True
         debug = True
     if debug:
         print("Debug mode activated.")
         present_count = 1
-        message, user_data = message_user_input(present_count, debug=True)
     else:
         present_count = get_present_count()
-        message, user_data = message_user_input(present_count)
-    
+        
+    message, user_data = message_user_input(present_count, debug)
+    print("User data prior to matching shown below:")
+    display_user_data(user_data, present_count)
     user_data, present_count = determine_gifting_pairs(user_data, present_count)
-    emailing_users(user_data, message, from_address, password)
+    
+    filename, valid = save_pairs_to_file(user_data, debug)
 
-    if debug:
-        display_user_data(user_data, present_count)
-        evaluate_gifting_pairs(user_data, present_count)
+    if valid:
+        emailing_users(user_data, message, from_address, password, debug, verbose)
+
+        if debug:
+            display_user_data(user_data, present_count)
+            evaluate_gifting_pairs(user_data, present_count)
+    
+    print()
+    print("Thank you for using the Secret Santa Emailer! Goodbye.")
 
 if __name__ == "__main__":
     main()
