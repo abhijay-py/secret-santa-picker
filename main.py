@@ -65,7 +65,7 @@ def display_user_data(user_data, present_count):
     for name, data in user_data.items():
         removal_list.append(name)
         internal_counter += 1
-        print(f"{internal_counter}. Name: {name}, Email: {data['email']}, Address: {data['address']}, Gifting To: {data['gifting_to']}")
+        print(f"{internal_counter}. Name: {name}, Email: {data['email']}, Address: {data['address']}, Delivery Instructions: {data['delivery_instructions']}, Gifting To: {data['gifting_to']}")
     return internal_counter, removal_list
 
 def delete_user_data_entry(user_data, removal_list, internal_counter):
@@ -120,11 +120,14 @@ def import_user_data_from_file(filename, present_count):
                     print(f"Duplicate email address found in CSV file, Row number {counter}: '{row[1]}'. Each participant must have a unique email address.")
                     valid = False
                     break
+                
                     
-                user_data[row[0]] = {'email': row[1], 'address': 'N/A', 'gifting_to': [], 'number_of_unassigned_gifters': present_count}
+                user_data[row[0]] = {'email': row[1], 'address': 'N/A', 'delivery_instructions': 'N/A', 'gifting_to': [], 'number_of_unassigned_gifters': present_count}
             
                 if len(row) > 2:
                     user_data[row[0]]['address'] = row[2]
+                    if len(row) > 3:
+                        user_data[row[0]]['delivery_instructions'] = row[3]
     except:
         print(f"Failed to read the file '{filename}'. Please ensure the file exists and is accessible as a csv.")
         valid = False
@@ -166,7 +169,12 @@ def import_user_data_from_terminal(present_count, prior_count=1, prior_user_data
         if address == '':
             address = 'N/A'
 
-        user_data[name] = {'email': email, 'address': address, 'gifting_to': [], 'number_of_unassigned_gifters': present_count}
+        print()
+        delivery_instructions = input(f"Please enter the delivery instructions of participant #{counter} ({name}), or simply press enter to skip: ")
+        if delivery_instructions == '':
+            delivery_instructions = 'N/A'
+
+        user_data[name] = {'email': email, 'address': address, 'delivery_instructions': delivery_instructions, 'gifting_to': [], 'number_of_unassigned_gifters': present_count}
         print(f"Added participant: {name}.")
 
         inside_valid = False
@@ -242,7 +250,7 @@ def message_user_input(present_count, debug=False):
         while not valid:
             valid = True
             print()
-            print("Messages can use [reciever_name], [gifter_name], and [reciver_address] as placeholders in the message as needed.")
+            print("Messages can use [reciever_name], [gifter_name], [delivery_instructions] and [reciver_address] as placeholders in the message as needed.")
             if message_source == 1:
                 input_file = input("Please enter the file name of the text file containing the message that will be used in the email: ")
                 try:
@@ -259,7 +267,7 @@ def message_user_input(present_count, debug=False):
                 valid = False
             else:
                 temp_msg = message
-                temp_msg = temp_msg.replace("[gifter_name]", "GIFTER_NAME").replace("[receiver_name]", "RECEIVER_NAME").replace("[receiver_address]", "RECEIVER_ADDRESS")
+                temp_msg = temp_msg.replace("[gifter_name]", "GIFTER_NAME").replace("[receiver_name]", "RECEIVER_NAME").replace("[receiver_address]", "RECEIVER_ADDRESS").replace("[delivery_instructions]", "DELIVERY_INSTRUCTIONS")
                 print("Please confirm this is your intended message. Note that your parameters to be replaced should be replaced in this message without brackets and in caps:")
                 print()
                 print("\'" + temp_msg + "\'")
@@ -286,9 +294,9 @@ def message_user_input(present_count, debug=False):
             valid = True
             print()
             
-            if user_source == 1:
+            if user_source == 1:          
                 print("Each line should contain two or three elements seperated by commas.")
-                print("the first being the name, second being the email,  and third (optionally) containing their address.")
+                print("the first being the name, second being the email,  third (optionally) containing their address, and fourth (optionally) containing any delivery instructions.")
                 print("Ensure the csv file does not contain a header row.")
                 print()
                 input_file = input("Please enter the file name of the csv file containing the user data of the participants: ")
@@ -359,12 +367,15 @@ def emailing_users(user_data, message, from_address, password, debug=False, verb
         for gifting_to in data['gifting_to']:
             names = names + gifting_to + ", "
             addresses = addresses + user_data[gifting_to]['address'] + ", "
+            delivery_instructions = user_data[gifting_to]['delivery_instructions'] + "; "
         names = names[:-2]
         addresses = addresses[:-2]
+        delivery_instructions = delivery_instructions[:-2]
         
         personalized_message = message.replace("[gifter_name]", name)
         personalized_message = personalized_message.replace("[receiver_name]", names)
         personalized_message = personalized_message.replace("[receiver_address]", addresses)
+        personalized_message = personalized_message.replace("[delivery_instructions]", delivery_instructions)
         email_success = emailing(from_address, password, data['email'], personalized_message, False, debug, verbose)
         if email_success:
             print(f"Email successfully sent to {name} ({data['email']}) for gifting.")
@@ -376,6 +387,7 @@ def emailing_users(user_data, message, from_address, password, debug=False, verb
     return invalid_emails
 
 def save_pairs_to_file(user_data, debug=False):
+
     filename = "gifting_pairs.txt"
     if not debug:
         valid = False
